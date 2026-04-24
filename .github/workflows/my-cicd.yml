@@ -1,0 +1,122 @@
+name: 🎓 Practice CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+
+      # Mock checks
+      - run: echo "Lint passed ✅"
+      - run: echo "Format check passed ✅"
+
+  run-tests:
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+
+      # Mock test
+      - run: echo "Tests passed ✅"
+
+  build:
+    runs-on: ubuntu-latest
+    needs: run-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Build App
+        run: npm run build
+
+      - name: Upload Build Output
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-output
+          path: build/
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Build
+        uses: actions/download-artifact@v3
+        with:
+          name: build-output
+          path: build/
+
+      - name: Deploy to Netlify (Staging)
+        uses: nwtgck/actions-netlify@v2
+        with:
+          publish-dir: './build'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          alias: staging
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+  staging-tests:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    steps:
+      - run: echo "Staging tests passed ✅"
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: staging-tests
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Build
+        uses: actions/download-artifact@v3
+        with:
+          name: build-output
+          path: build/
+
+      - name: Deploy to Netlify (Production)
+        uses: nwtgck/actions-netlify@v2
+        with:
+          publish-dir: './build'
+          production-deploy: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: always()
+    steps:
+      - run: echo "Pipeline finished 🚀"
