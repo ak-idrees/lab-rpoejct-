@@ -65,7 +65,7 @@ jobs:
       - name: Build App
         run: npm run build
         env:
-         CI: false
+          CI: false
 
       - name: Upload Build Output
         uses: actions/upload-artifact@v4
@@ -79,14 +79,14 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/develop'   # ✅ FIX: triggers on develop only
 
     environment:
       name: staging
 
     steps:
       - name: Download Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4                  # ✅ FIX: upgraded to v4
         with:
           name: build-output
           path: build/
@@ -107,6 +107,7 @@ jobs:
   staging-tests:
     runs-on: ubuntu-latest
     needs: deploy-staging
+    if: github.ref == 'refs/heads/develop'   # ✅ FIX: added if condition
     steps:
       - run: echo "Staging tests passed ✅"
 
@@ -115,15 +116,15 @@ jobs:
   # ─────────────────────────────
   deploy-production:
     runs-on: ubuntu-latest
-    needs: staging-tests
-    if: github.ref == 'refs/heads/main'
+    needs: build                             # ✅ FIX: depends on build, NOT staging-tests
+    if: github.ref == 'refs/heads/main'      # ✅ triggers on main only
 
     environment:
       name: production   # 👈 THIS enables approval
 
     steps:
       - name: Download Build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4   # ✅ FIX: upgraded from v3 to v4
         with:
           name: build-output
           path: build/
@@ -143,7 +144,7 @@ jobs:
   # ─────────────────────────────
   notify:
     runs-on: ubuntu-latest
-    needs: deploy-production
+    needs: [deploy-staging, deploy-production]   # ✅ FIX: watches both deploys
     if: always()
     steps:
-      - run: echo "Pipeline finished 🚀"
+      - run: echo "Pipeline completed 🚀"
