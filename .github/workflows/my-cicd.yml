@@ -12,43 +12,54 @@ env:
 
 jobs:
 
+  # ─────────────────────────────
+  # CODE QUALITY
+  # ─────────────────────────────
   code-quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-      - run: npm ci
 
-      # Mock checks
+      - run: npm ci
       - run: echo "Lint passed ✅"
       - run: echo "Format check passed ✅"
 
+  # ─────────────────────────────
+  # TESTS
+  # ─────────────────────────────
   run-tests:
     runs-on: ubuntu-latest
     needs: code-quality
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-      - run: npm ci
 
-      # Mock test
+      - run: npm ci
       - run: echo "Tests passed ✅"
 
+  # ─────────────────────────────
+  # BUILD
+  # ─────────────────────────────
   build:
     runs-on: ubuntu-latest
     needs: run-tests
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+
       - run: npm ci
 
       - name: Build App
@@ -60,14 +71,18 @@ jobs:
           name: build-output
           path: build/
 
+  # ─────────────────────────────
+  # 🚧 STAGING DEPLOY (develop only)
+  # ─────────────────────────────
   deploy-staging:
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/develop'
+
+    environment:
+      name: staging
 
     steps:
-      - uses: actions/checkout@v4
-
       - name: Download Build
         uses: actions/download-artifact@v3
         with:
@@ -78,26 +93,33 @@ jobs:
         uses: nwtgck/actions-netlify@v2
         with:
           publish-dir: './build'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           alias: staging
+          github-token: ${{ secrets.GITHUB_TOKEN }}
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
 
+  # ─────────────────────────────
+  # STAGING TESTS
+  # ─────────────────────────────
   staging-tests:
     runs-on: ubuntu-latest
     needs: deploy-staging
     steps:
       - run: echo "Staging tests passed ✅"
 
+  # ─────────────────────────────
+  # 🚀 PRODUCTION DEPLOY (WITH APPROVAL)
+  # ─────────────────────────────
   deploy-production:
     runs-on: ubuntu-latest
     needs: staging-tests
     if: github.ref == 'refs/heads/main'
 
-    steps:
-      - uses: actions/checkout@v4
+    environment:
+      name: production   # 👈 THIS enables approval
 
+    steps:
       - name: Download Build
         uses: actions/download-artifact@v3
         with:
@@ -114,6 +136,9 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
 
+  # ─────────────────────────────
+  # NOTIFY
+  # ─────────────────────────────
   notify:
     runs-on: ubuntu-latest
     needs: deploy-production
